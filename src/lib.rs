@@ -3,9 +3,9 @@
 #[macro_use]
 extern crate napi_derive;
 
-use std::convert::TryInto;
-
-use napi::{CallContext, Env, JsNumber, JsObject, Result, Task};
+use calamine::{DataType, Range, Reader, Xlsb};
+use napi::{CallContext, JsBuffer, JsObject, JsString, Result};
+use std::io::Cursor;
 
 #[cfg(all(
   any(windows, unix),
@@ -16,43 +16,102 @@ use napi::{CallContext, Env, JsNumber, JsObject, Result, Task};
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-struct AsyncTask(u32);
-
-impl Task for AsyncTask {
-  type Output = u32;
-  type JsValue = JsNumber;
-
-  fn compute(&mut self) -> Result<Self::Output> {
-    use std::thread::sleep;
-    use std::time::Duration;
-    sleep(Duration::from_millis(self.0 as u64));
-    Ok(self.0 * 2)
-  }
-
-  fn resolve(self, env: Env, output: Self::Output) -> Result<Self::JsValue> {
-    env.create_uint32(output)
-  }
-}
-
 #[module_exports]
 fn init(mut exports: JsObject) -> Result<()> {
-  exports.create_named_method("sync", sync_fn)?;
-
-  exports.create_named_method("sleep", sleep)?;
+  exports.create_named_method("world", world_xlsb)?;
   Ok(())
 }
 
-#[js_function(1)]
-fn sync_fn(ctx: CallContext) -> Result<JsNumber> {
-  let argument: u32 = ctx.get::<JsNumber>(0)?.try_into()?;
+#[js_function(3)]
+fn world_xlsb(ctx: CallContext) -> Result<JsObject> {
+  let buf = &mut ctx.get::<JsBuffer>(0)?.into_value()?;
+  let sheet_name = ctx.get::<JsString>(1)?.into_utf8()?;
+  let headers = ctx.get::<JsObject>(2)?;
 
-  ctx.env.create_uint32(argument + 100)
+  let header_vec = read_headers(headers)?;
+
+  let mut wb = Xlsb::new(Cursor::new(buf.to_vec())).unwrap();
+
+  // let sheets = wb.sheet_names();
+  // let mut obj = ctx.env.create_array_with_length(sheets.len())?;
+  // for (i, sheet) in sheets.iter().enumerate() {
+  //   obj.set_element(i as u32, ctx.env.create_string(sheet)?)?;
+  // }
+
+  let sheet_name_str = sheet_name.as_str()?;
+  let r = wb.worksheet_range(&sheet_name_str).unwrap();
+  assert!(r.is_ok(), "missing sheet '{}'", sheet_name_str);
+  let range = r.unwrap();
+  return world_wb(ctx, range, header_vec);
 }
 
-#[js_function(1)]
-fn sleep(ctx: CallContext) -> Result<JsObject> {
-  let argument: u32 = ctx.get::<JsNumber>(0)?.try_into()?;
-  let task = AsyncTask(argument);
-  let async_task = ctx.env.spawn(task)?;
-  Ok(async_task.promise_object())
+fn read_headers(inp: JsObject) -> Result<Vec<String>> {
+  assert!(inp.is_array()?);
+
+  let m = inp.get_array_length()? as usize;
+  let mut header_vec = Vec::new();
+  for i in 0..(m as u32) {
+    let el: JsString = inp.get_element(i)?;
+    let s = el.into_utf8()?;
+    header_vec.push(String::from(s.as_str()?));
+  }
+  return Ok(header_vec);
+}
+
+fn world_wb(ctx: CallContext, range: Range<DataType>, headers: Vec<String>) -> Result<JsObject> {
+  let l = range.get_size().0;
+  let m = headers.len();
+
+  let mut output = ctx.env.create_array_with_length(l - 1)?;
+
+  let mut it = range.rows();
+  let header = it.nth(0).unwrap(); // TODO handle error
+
+  let header_values: Vec<String> = header
+    .iter()
+    .map(|c| c.to_string().to_uppercase().trim().to_string())
+    .collect();
+
+  let indexes: Vec<usize> = headers
+    .iter()
+    .map(|s| {
+      header_values
+        .iter()
+        .position(|ss| s.to_uppercase().eq(ss))
+        .unwrap()
+    })
+    .collect();
+
+  let mut ind: Vec<usize> = indexes.clone();
+  ind.sort();
+
+  let positions: Vec<usize> = ind
+    .iter()
+    .map(|i| indexes.iter().position(|j| j == i).unwrap())
+    .collect();
+
+  for (j, row) in it.enumerate() {
+    let mut out = ctx.env.create_array_with_length(m)?;
+    let mut r = row.iter().enumerate();
+
+    let mut i = 0 as usize;
+    while i < m {
+      if let Some(t) = r.next() {
+        let (jj, c) = t;
+        if jj == ind[i] {
+          out.set_element(
+            positions[i] as u32,
+            ctx.env.create_string(c.to_string().as_str())?,
+          )?;
+          i += 1;
+          continue;
+        }
+      } else {
+        break;
+      }
+    }
+    output.set_element(j as u32, out)?;
+  }
+
+  return Ok(output);
 }
