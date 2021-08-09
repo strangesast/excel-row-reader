@@ -1,14 +1,24 @@
 {
-  "name": "@napi-rs/package-template",
-  "version": "1.0.0",
+  "name": "rusty-excel-reader",
+  "version": "0.0.1",
   "description": "Template project for writing node package with napi-rs",
   "main": "index.js",
-  "repository": "git@github.com:napi-rs/package-template.git",
+  "repository": "git@github.com:strangesast/rusty-excel-reader.git",
   "license": "MIT",
-  "keywords": ["napi-rs", "NAPI", "N-API", "Rust", "node-addon", "node-addon-api"],
-  "files": ["index.d.ts", "index.js"],
+  "keywords": [
+    "napi-rs",
+    "NAPI",
+    "N-API",
+    "Rust",
+    "node-addon",
+    "node-addon-api"
+  ],
+  "files": [
+    "index.d.ts",
+    "index.js"
+  ],
   "napi": {
-    "name": "package-template",
+    "name": "rusty-excel-reader",
     "triples": {
       "defaults": true,
       "additional": [
@@ -67,24 +77,39 @@
     "typescript": "^4.3.5"
   },
   "dependencies": {
-    "@node-rs/helper": "^1.2.1"
+    "@node-rs/helper": "^1.2.1",
+    "ajv": "^8.6.2",
+    "ajv-formats": "^2.1.0"
   },
   "lint-staged": {
-    "*.@(js|ts|tsx)": ["prettier --write", "eslint -c .eslintrc.yml --fix"],
-    "*.@(yml|yaml)": ["prettier --parser yaml --write"],
-    "*.md": ["prettier --parser markdown --write"],
-    "*.json": ["prettier --parser json --write"]
+    "*.@(js|ts|tsx)": [
+      "prettier --write",
+      "eslint -c .eslintrc.yml --fix"
+    ],
+    "*.@(yml|yaml)": [
+      "prettier --parser yaml --write"
+    ],
+    "*.md": [
+      "prettier --parser markdown --write"
+    ],
+    "*.json": [
+      "prettier --parser json --write"
+    ]
   },
   "ava": {
-    "require": ["@swc-node/register"],
-    "extensions": ["ts"],
+    "require": [
+      "@swc-node/register"
+    ],
+    "extensions": [
+      "ts"
+    ],
     "environmentVariables": {
       "TS_NODE_PROJECT": "./tsconfig.json"
     }
   },
   "prettier": {
     "printWidth": 120,
-    "semi": false,
+    "semi": true,
     "trailingComma": "all",
     "singleQuote": true,
     "arrowParens": "always",
