@@ -58,11 +58,15 @@ fn read_headers(inp: JsObject) -> Result<Vec<String>> {
   return Ok(header_vec);
 }
 
+/**
+ * headers is case-insensitive list of strings to match against first row
+ *
+ */
 fn world_wb(ctx: CallContext, range: Range<DataType>, headers: Vec<String>) -> Result<JsObject> {
   let l = range.get_size().0;
   let m = headers.len();
 
-  let mut output = ctx.env.create_array_with_length(l - 1)?;
+  let mut output = ctx.env.create_array_with_length(l - 1)?; // array of arrays to return to node
 
   let mut it = range.rows();
   let header = it.nth(0).unwrap(); // TODO handle error
@@ -94,15 +98,29 @@ fn world_wb(ctx: CallContext, range: Range<DataType>, headers: Vec<String>) -> R
     let mut out = ctx.env.create_array_with_length(m)?;
     let mut r = row.iter().enumerate();
 
-    let mut i = 0 as usize;
+    let mut i = 0usize;
     while i < m {
       if let Some(t) = r.next() {
         let (jj, c) = t;
         if jj == ind[i] {
-          out.set_element(
-            positions[i] as u32,
-            ctx.env.create_string(c.to_string().as_str())?,
-          )?;
+          let k = positions[i] as u32;
+          match *c {
+            DataType::String(ref s) => {
+              out.set_element(k, ctx.env.create_string(s.as_str())?)?;
+            }
+            DataType::DateTime(ref f) | DataType::Float(ref f) => {
+              // let d = c.as_date().unwrap().format("%Y-%m-%d").to_string();
+              // out.set_element(ii, ctx.env.create_string(d.as_str())?)?;
+              out.set_element(k, ctx.env.create_double(*f)?)?;
+            }
+            DataType::Int(ref d) => {
+              out.set_element(k, ctx.env.create_int64(*d)?)?;
+            }
+            DataType::Bool(ref b) => {
+              out.set_element(k, ctx.env.get_boolean(*b)?)?;
+            }
+            _ => {}
+          }
           i += 1;
           continue;
         }
@@ -112,6 +130,5 @@ fn world_wb(ctx: CallContext, range: Range<DataType>, headers: Vec<String>) -> R
     }
     output.set_element(j as u32, out)?;
   }
-
   return Ok(output);
 }

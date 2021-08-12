@@ -109,6 +109,16 @@ const HEADER = [
   console.timeEnd('world');
 
   console.time('map');
-  console.log(result.map((a) => Object.fromEntries(a.map((v, i) => [HEADER[i], v]))).slice(0, 2));
+  const records = [];
+  for (let i = 0; i < result.length; i++) {
+    const record = {};
+    for (let j = 0; j < HEADER.length; j++) {
+      record[HEADER[j]] = result[i][j];
+    }
+    records.push(record);
+  }
+  await fs.writeFile('a.json', Buffer.from(JSON.stringify(records[0], null, 2)));
+  // console.log(records[0]);
+  console.log(records.length);
   console.timeEnd('map');
 })();
