@@ -7,8 +7,11 @@ use calamine::vba::VbaProject;
 use calamine::{DataType, Error, Metadata, Range, Reader, Xls, Xlsb, Xlsx};
 use napi::Error as NapiError;
 use napi::Result as NapiResult;
-use napi::{CallContext, JsBuffer, JsBufferValue, JsObject, JsString, Status};
+use napi::{
+  CallContext, JsBuffer, JsBufferValue, JsNumber, JsObject, JsString, JsUnknown, Status, ValueType,
+};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io::Cursor;
 
 #[cfg(all(
@@ -81,10 +84,14 @@ impl Reader for CurSheets {
 
 fn get_wb(s: &str, buf: &mut JsBufferValue) -> NapiResult<CurSheets> {
   let cur = Cursor::new(buf.to_vec());
+  let err = Err(NapiError::new(
+    Status::InvalidArg,
+    format!("not in {} format", s),
+  ));
   return match s {
-    "xlsx" => Ok(CurSheets::Xlsx(Xlsx::new(cur).unwrap())),
-    "xlsb" => Ok(CurSheets::Xlsb(Xlsb::new(cur).unwrap())),
-    "xls" => Ok(CurSheets::Xls(Xls::new(cur).unwrap())),
+    "xlsx" | "xlsm" => Xlsx::new(cur).map_or(err, |wb| Ok(CurSheets::Xlsx(wb))),
+    "xlsb" => Xlsb::new(cur).map_or(err, |wb| Ok(CurSheets::Xlsb(wb))),
+    "xls" => Xls::new(cur).map_or(err, |wb| Ok(CurSheets::Xls(wb))),
     _ => Err(NapiError::new(Status::InvalidArg, String::new())),
   };
 }
@@ -94,28 +101,41 @@ fn parse(ctx: CallContext) -> NapiResult<JsObject> {
   let u = ctx.get::<JsString>(0)?.into_utf8()?;
   let s = u.as_str()?;
   let buf = &mut ctx.get::<JsBuffer>(1)?.into_value()?;
-  let sheet_name = ctx.get::<JsString>(2)?.into_utf8()?;
-  let headers = ctx.get::<JsObject>(3)?;
+  let headers = ctx.get::<JsObject>(2)?;
+  let sheet_input = ctx.get::<JsUnknown>(3)?;
 
-  let header_vec = read_headers(headers)?;
-
-  // let cur = Cursor::new(buf.to_vec());
-  // let mut wb = Xlsb::new(cur).unwrap();
   let mut wb = get_wb(s, buf)?;
 
-  // let sheets = wb.sheet_names();
-  // let mut obj = ctx.env.create_array_with_length(sheets.len())?;
-  // for (i, sheet) in sheets.iter().enumerate() {
-  //   obj.set_element(i as u32, ctx.env.create_string(sheet)?)?;
-  // }
+  // if sheet is string, get sheet by name, if number, get sheet by index, if
+  // undefined, get first sheet
+  let range_result = match sheet_input.get_type()? {
+    ValueType::String => {
+      let sheet_name_o: JsString = unsafe { sheet_input.cast() };
+      let sheet_name = sheet_name_o.into_utf8()?;
+      let sheet_name_str = sheet_name.as_str()?;
+      let r = wb.worksheet_range(&sheet_name_str).unwrap().unwrap();
+      Ok(r)
+    }
+    ValueType::Number => {
+      let sheet_number_o: JsNumber = unsafe { sheet_input.cast() };
+      let sheet_number = sheet_number_o.get_int32()? as usize;
+      let r = wb.worksheet_range_at(sheet_number).unwrap().unwrap();
+      Ok(r)
+    }
+    ValueType::Null | ValueType::Undefined => {
+      let r = wb.worksheet_range_at(0).unwrap().unwrap();
+      Ok(r)
+    }
+    _ => Err(NapiError::new(Status::InvalidArg, String::new())),
+  };
 
-  let sheet_name_str = sheet_name.as_str()?;
-  let r = wb.worksheet_range(&sheet_name_str).unwrap();
-  assert!(r.is_ok(), "missing sheet '{}'", sheet_name_str);
-  let range = r.unwrap();
+  let range = range_result?;
+  let header_vec = read_headers(headers)?;
+
   return parse_range(ctx, range, header_vec);
 }
 
+// convert [string, string][] to Vec<(trimmed,uppercased,String,String)>
 fn read_headers(inp: JsObject) -> NapiResult<Vec<(String, String)>> {
   assert!(inp.is_array()?);
 
@@ -129,6 +149,8 @@ fn read_headers(inp: JsObject) -> NapiResult<Vec<(String, String)>> {
       el.get_element::<JsString>(0)?
         .into_utf8()?
         .as_str()?
+        .to_uppercase()
+        .trim()
         .to_string(),
       el.get_element::<JsString>(1)?
         .into_utf8()?
@@ -140,98 +162,63 @@ fn read_headers(inp: JsObject) -> NapiResult<Vec<(String, String)>> {
   return Ok(header_vec);
 }
 
-/**
- * headers is case-insensitive list of strings to match against first row
- *
- */
 fn parse_range(
   ctx: CallContext,
   range: Range<DataType>,
-  output_headers: Vec<(String, String)>,
+  headers: Vec<(String, String)>,
 ) -> NapiResult<JsObject> {
-  let l = range.get_size().0;
-  let m = output_headers.len();
+  let (h, w) = range.get_size();
+  assert!(
+    w > 1 && h > 1,
+    "invalid range: must have >1 row and >0 columns"
+  );
+  let mut output = ctx.env.create_array_with_length(h - 1)?; // array of arrays to return to node
 
-  let mut output = ctx.env.create_array_with_length(l - 1)?; // array of arrays to return to node
-
-  let mut it = range.rows();
-
-  let header_values: Vec<String> = it
-    .nth(0)
-    .unwrap()
-    .iter()
-    .map(|c| c.to_string().to_uppercase().trim().to_string())
-    .collect();
-
-  let indexes: Vec<(usize, JsString)> = output_headers
-    .iter()
-    .map(|s| {
-      (
-        header_values
-          .iter()
-          .position(|ss| s.0.to_uppercase().eq(ss))
-          .unwrap(),
-        ctx.env.create_string_from_std(s.1.clone()).unwrap(),
-      )
+  let header_map: HashMap<String, usize> = (0..w)
+    .filter_map(|i| match range.get((0, i)) {
+      Some(cell) => Some((cell.to_string().to_uppercase().trim().to_string(), i)),
+      None => None,
     })
     .collect();
 
-  let mut ind = indexes.clone();
-  ind.sort_by_key(|k| k.0);
+  let indexes: Vec<(usize, JsString)> = headers
+    .iter()
+    .map(|(s0, s1)| match header_map.get(s0) {
+      Some(&index) => (index, ctx.env.create_string(s1).unwrap()),
+      None => panic!("missing header in file"),
+    })
+    .collect();
+  // indexes.sort_by_key(|k| k.0);
 
-  // let positions: Vec<usize> = ind
-  //   .iter()
-  //   .map(|i| indexes.iter().position(|j| j == i).unwrap())
-  //   .collect();
-
-  // let header_strings: Vec<JsString> = header_values
-  //   .iter()
-  //   .map(|s| ctx.env.create_string_from_std(s.clone()).unwrap())
-  //   .collect();
-
-  for (j, row) in it.enumerate() {
-    // let mut out = ctx.env.create_array_with_length(m)?;
+  for j in 1..h {
     let mut out = ctx.env.create_object()?;
-    let mut r = row.iter().enumerate();
 
-    let mut i = 0usize;
-    while i < m {
-      if let Some(t) = r.next() {
-        let (jj, c) = t;
-        if jj == ind[i].0 {
-          // let k = positions[i] as u32;
-          // let k = header_strings[positions[i]];
-          let k = ind[i].1;
-          match *c {
-            DataType::String(ref s) => {
-              // out.set_element(k, ctx.env.create_string(s.as_str())?)?;
-              if s.trim() != "" {
-                out.set_property(k, ctx.env.create_string(s.as_str())?)?;
-              }
+    for (i, key) in indexes.iter() {
+      // for k in 0..l {
+      //   let (i, key) = indexes[k];
+      match range.get((j, *i)) {
+        Some(c) => match *c {
+          DataType::String(ref s) => {
+            let ss = s.trim();
+            if ss != "" {
+              out.set_property(*key, ctx.env.create_string(ss)?)?;
             }
-            DataType::Float(ref f) => {
-              // includes dates
-              // out.set_element(k, ctx.env.create_double(*f)?)?;
-              out.set_property(k, ctx.env.create_double(*f)?)?;
-            }
-            DataType::Int(ref d) => {
-              // out.set_element(k, ctx.env.create_int64(*d)?)?;
-              out.set_property(k, ctx.env.create_int64(*d)?)?;
-            }
-            DataType::Bool(ref b) => {
-              // out.set_element(k, ctx.env.get_boolean(*b)?)?;
-              out.set_property(k, ctx.env.get_boolean(*b)?)?;
-            }
-            _ => {}
           }
-          i += 1;
-          continue;
-        }
-      } else {
-        break;
+          DataType::DateTime(ref f) | DataType::Float(ref f) => {
+            out.set_property(*key, ctx.env.create_double(*f)?)?;
+          }
+          DataType::Int(ref d) => {
+            out.set_property(*key, ctx.env.create_int64(*d)?)?;
+          }
+          DataType::Bool(ref b) => {
+            out.set_property(*key, ctx.env.get_boolean(*b)?)?;
+          }
+          _ => {}
+        },
+        _ => {}
       }
     }
-    output.set_element(j as u32, out)?;
+    output.set_element((j - 1) as u32, out)?;
   }
   return Ok(output);
 }

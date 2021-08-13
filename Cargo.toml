@@ -13,8 +13,8 @@ crate-type = ["cdylib"]
 #napi = {version = "1.7.5", features=["napi8"]} # necessary for the create_date fn
 napi = "1.7.5"
 napi-derive = "1"
-#calamine = {version = "0.18.0", features = ["dates"]}
-calamine = "0.18.0"
+calamine = {version = "0.18.0", features = ["dates"]}
+#calamine = "0.18.0"
 
 [target.'cfg(all(any(windows, unix), target_arch = "x86_64", not(target_env = "musl")))'.dependencies]
 mimalloc = {version = "0.1"}
