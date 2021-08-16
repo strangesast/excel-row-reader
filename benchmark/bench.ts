@@ -1,28 +1,29 @@
-import b from 'benny'
+import * as fs from 'fs';
 
-import { sync } from '../index'
+import b from 'benny';
 
-function add(a: number) {
-  return a + 100
-}
+import { parse } from '../index';
+
+const BUF = fs.readFileSync('./example.xlsb');
+const HEADERS = [
+  ['one', 1],
+  ['two', 2],
+  ['forty-four', '44'],
+] as [string, string][];
 
 async function run() {
   await b.suite(
-    'Add 100',
+    'parse',
 
-    b.add('Native a + 100', () => {
-      sync(10)
-    }),
-
-    b.add('JavaScript a + 100', () => {
-      add(10)
+    b.add('xlsb', () => {
+      parse('xlsb', BUF, HEADERS, 0);
     }),
 
     b.cycle(),
     b.complete(),
-  )
+  );
 }
 
 run().catch((e) => {
-  console.error(e)
-})
+  console.error(e);
+});
