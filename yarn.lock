@@ -162,14 +162,9 @@
   dependencies:
     "source-map-support" "^0.5.19"
 
-"@swc/core-linux-x64-gnu@^1.2.60":
-  "integrity" "sha512-VNkkEQj4Lim8/TTLRC6aibd4Y2TuA4pvF3wgBokp3+o0p8asc/Mz1IdFQr36Lq1qJJsPrJC/HXDici+qZQ/RPw=="
-  "resolved" "https://registry.npmjs.org/@swc/core-linux-x64-gnu/-/core-linux-x64-gnu-1.2.60.tgz"
-  "version" "1.2.60"
-
-"@swc/core-linux-x64-musl@^1.2.60":
-  "integrity" "sha512-ZPLm3cP+W8Rw51R1ap4alLsFAN8saggw/gLq3hiMHr//cyDjR3Hj7KrHeqhe3IckP0UTKqdY18I7tILThmRVag=="
-  "resolved" "https://registry.npmjs.org/@swc/core-linux-x64-musl/-/core-linux-x64-musl-1.2.60.tgz"
+"@swc/core-darwin-arm64@^1.2.60":
+  "integrity" "sha512-i1yH/g0b7ewDBmpr9XWU3NmwSqQZyzNEr8EnaDyvl1p5zX1nib3YTckKqcHI7lCCbP7EpUxv6KPMD+J38qGYPg=="
+  "resolved" "https://registry.npmjs.org/@swc/core-darwin-arm64/-/core-darwin-arm64-1.2.60.tgz"
   "version" "1.2.60"
 
 "@swc/core@^1.2.59":
@@ -1427,6 +1422,11 @@
   "integrity" "sha1-FQStJSMVjKpA20onh8sBQRmU6k8="
   "resolved" "https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz"
   "version" "1.0.0"
+
+"fsevents@~2.3.1":
+  "integrity" "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA=="
+  "resolved" "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz"
+  "version" "2.3.2"
 
 "function-bind@^1.1.1":
   "integrity" "sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A=="

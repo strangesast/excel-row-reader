@@ -1,6 +1,6 @@
 {
   "name": "rusty-excel-reader",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "convert excel to json structure based on header",
   "main": "index.js",
   "repository": "git@github.com:strangesast/rusty-excel-reader.git",
